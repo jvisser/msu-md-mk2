@@ -1,0 +1,1 @@
+srecpatch.exe "ROMS\in_padded.md" OUTPUT\out.md<srecfile.txt
