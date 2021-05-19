@@ -52,36 +52,37 @@ Game
 
 ; TABLES: ------------------------------------------------------------------------------------------
 
-AUDIO_TBL       ;trackId;cmd                    ; #Track Name
-        dc.w    $0031                           ; 01 - Title Theme
-        dc.w    $014f                           ; 02 - Character Select
-        dc.w    $0257                           ; 03 - Selected
-        dc.w    $0369                           ; 04 - Your Destiny
-        dc.w    $0438                           ; 05 - The Dead Pool
-        dc.w    $0540                           ; 06 - The Dead Pool ~ Critical
-        dc.w    $0641                           ; 07 - The Dead Pool ~ Over
-        dc.w    $0788                           ; 08 - The Tomb - Special Portal
-        dc.w    $0890                           ; 09 - The Tomb ~ Critical
-        dc.w    $0991                           ; 10 - The Tomb ~ Over
-        dc.w    $0a02                           ; 11 - Wasteland - The Pit II - Kahn's Arena
-        dc.w    $0b2e                           ; 12 - Wasteland ~ Critical
-        dc.w    $0c0d                           ; 13 - Wasteland ~ Over
-        dc.w    $0d42                           ; 14 - Cloud Room - Portal
-        dc.w    $0e4d                           ; 15 - Cloud Room ~ Critical
-        dc.w    $0f4e                           ; 16 - Cloud Room ~ Over
-        dc.w    $100e                           ; 17 - Living Forest
-        dc.w    $112f                           ; 18 - Living Forest ~ Critical
-        dc.w    $1220                           ; 19 - Living Forest ~ Over
-        dc.w    $1321                           ; 20 - Armoury
-        dc.w    $1430                           ; 21 - Armoury ~ Critical
-        dc.w    $152d                           ; 22 - Armoury ~ Over
-        dc.w    $1673                           ; 23 - Finish Him!
-        dc.w    $1752                           ; 24 - Fatality!
-        dc.w    $1853                           ; 25 - Babality!
-        dc.w    $1958                           ; 26 - Friendship!
-        dc.w    $1a55                           ; 27 - Liu Kang's Friendship Dance
-        dc.w    $1b72                           ; 28 - Shao Kahn Defeated
-        dc.w    $1c92                           ; 29 - Ending Theme
+AUDIO_TBL       ;%rtttttttcccccccc (r=repeat, t=cd track number, c=original music id)
+                                                ; #Track Name
+        dc.w    $0131                           ; 01 - Title Theme
+        dc.w    $824f                           ; 02 - Character Select
+        dc.w    $0357                           ; 03 - Selected
+        dc.w    $8469                           ; 04 - Your Destiny
+        dc.w    $8538                           ; 05 - The Dead Pool
+        dc.w    $8640                           ; 06 - The Dead Pool ~ Critical
+        dc.w    $0741                           ; 07 - The Dead Pool ~ Over
+        dc.w    $8888                           ; 08 - The Tomb - Special Portal
+        dc.w    $8990                           ; 09 - The Tomb ~ Critical
+        dc.w    $0a91                           ; 10 - The Tomb ~ Over
+        dc.w    $8b02                           ; 11 - Wasteland - The Pit II - Kahn's Arena
+        dc.w    $8c2e                           ; 12 - Wasteland ~ Critical
+        dc.w    $0d0d                           ; 13 - Wasteland ~ Over
+        dc.w    $8e42                           ; 14 - Cloud Room - Portal
+        dc.w    $8f4d                           ; 15 - Cloud Room ~ Critical
+        dc.w    $104e                           ; 16 - Cloud Room ~ Over
+        dc.w    $910e                           ; 17 - Living Forest
+        dc.w    $922f                           ; 18 - Living Forest ~ Critical
+        dc.w    $1320                           ; 19 - Living Forest ~ Over
+        dc.w    $9421                           ; 20 - Armoury
+        dc.w    $9530                           ; 21 - Armoury ~ Critical
+        dc.w    $162d                           ; 22 - Armoury ~ Over
+        dc.w    $1773                           ; 23 - Finish Him!
+        dc.w    $1852                           ; 24 - Fatality!
+        dc.w    $1953                           ; 25 - Babality!
+        dc.w    $1a58                           ; 26 - Friendship!
+        dc.w    $1b55                           ; 27 - Liu Kang's Friendship Dance
+        dc.w    $1c72                           ; 28 - Shao Kahn Defeated
+        dc.w    $9d92                           ; 29 - Ending Theme
 
 TOTAL_TRACKS equ 29
 
@@ -113,7 +114,7 @@ play_music_track
         bne     play
             ; 0 = Stop
             MCD_COMMAND CMD_PAUSE, 0
-            bra     orginal_code_4013a
+            bra     original_code_4013a
 play
         lea     AUDIO_TBL,a0
         moveq   #TOTAL_TRACKS-1,d1
@@ -124,22 +125,35 @@ find_track_loop
             cmp.b   d2,d0
             bne     next_track
 
-                ; Track found: Play
+                ; Track found: Determine command type
                 lsr.w   #8,d2
-                ori.w   #CMD_PLAY_LOOP,d2
+                bclr    #7,d2
+                bne     loop_play
+                    ; Single repetition
+                    ori.w   #CMD_PLAY,d2
+                bra     cmd_type_select_done
+loop_play
+                    ; Play in infinite loop
+                    ori.w   #CMD_PLAY_LOOP,d2
+cmd_type_select_done
+
+                ; Send play command
                 MCD_WAIT
                 move.w  d2,MCD_CMD
                 addq.b  #1,MCD_CMD_CK
 
                 ; Run stop command for original driver
                 moveq   #0,d0
-                bra     orginal_code_4013a
+                bra     original_code_4013a
 next_track
         dbra    d1,find_track_loop
 
-            ; If no track found run original track (unused tracks)
+            ; If no matching cd track found run original track (should never get here)
 
-orginal_code_4013a
+            ; First stop any still playing cd track
+            MCD_COMMAND CMD_PAUSE, 0
+
+original_code_4013a
         addq.w  #1,d0
         move.w  d0,$ffffb176.w
         st      $ffffb208.w
