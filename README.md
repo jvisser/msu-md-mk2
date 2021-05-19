@@ -9,6 +9,7 @@ SourceROM:     WORLD VERSION (CRC: A9E013D8) Mortal Kombat II (W) [!].bin
 
 Thanks:        ArcadeTV for providing the patch framework (https://github.com/ArcadeTV)
                Krikzz for the msu-md driver and Mega Everdrive (https://github.com/krikzz)
+               Relikk for the soundtrack and testing
 
 Source:        https://github.com/jvisser/msu-md-mk2
 
