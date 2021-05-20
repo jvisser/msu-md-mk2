@@ -2,14 +2,17 @@
 
 ```
 
-Title:         Mortal Kombat II - MSU MD Version
+Title:         Mortal Kombat II and Mortal Kombat II Unlimited - MSU MD Version
 System:        SEGA GENESIS / MEGA DRIVE (WORLD)
 
-SourceROM:     WORLD VERSION (CRC: A9E013D8) Mortal Kombat II (W) [!].bin
+SourceROMs:    WORLD VERSION (CRC: A9E013D8) Mortal Kombat II (W) [!].bin
+               WORLD VERSION (CRC: 53206165) Mortal Kombat II Unlimited by Smoke v1.0 (Hack).bin
 
 Thanks:        ArcadeTV for providing the patch framework (https://github.com/ArcadeTV)
                Krikzz for the msu-md driver and Mega Everdrive (https://github.com/krikzz)
                Relikk for the soundtrack and testing
+               PepilloPEV for the MD+ port and testing
+               Smoke for Mortal Kombat II Unlimited
 
 Source:        https://github.com/jvisser/msu-md-mk2
 
