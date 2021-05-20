@@ -46,9 +46,9 @@ Game
         org     $4013a                          ; Sound Hijack
         jmp     play_music_track
 
-; ORIGINAL ROM SPACE: ------------------------------------------------------------------------------------
+; SKIP ORIGINAL ROM SPACE: ------------------------------------------------------------------------------------
 
-    org     $2ffebc
+        org     $3f1f88 ; High to be compatible with MKII Unlimited (Needs an input ROM padded to 4MB for both the retail and the Unlimited (hack) versions)
 
 ; TABLES: ------------------------------------------------------------------------------------------
 
@@ -83,8 +83,18 @@ AUDIO_TBL       ;%rtttttttcccccccc (r=repeat, t=cd track number, c=original musi
         dc.w    $1b55                           ; 27 - Liu Kang's Friendship Dance
         dc.w    $1c72                           ; 28 - Shao Kahn Defeated
         dc.w    $9d92                           ; 29 - Ending Theme
-
-TOTAL_TRACKS equ 29
+        ; Mortal Kombat tracks included in Mortal Kombat II Unlimited (Hack)
+        dc.w    $9e96                           ; 30 - Warrior's Shrine
+        dc.w    $1fe9                           ; 31 - Warrior's Shrine Victory
+        dc.w    $a0b3                           ; 32 - The Pit
+        dc.w    $21ea                           ; 33 - The Pit Victory
+        dc.w    $a2cf                           ; 34 - Hall
+        dc.w    $23e7                           ; 35 - Hall Victory
+        dc.w    $a4c1                           ; 36 - Goro's Lair
+        dc.w    $25eb                           ; 37 - Goro's Lair Victory
+        dc.w    $a6a8                           ; 38 - Entrance
+        dc.w    $27e8                           ; 39 - Entrance Victory
+AUDIO_TBL_END
 
 ; ENTRY POINT: -------------------------------------------------------------------------------------
 
@@ -99,8 +109,8 @@ ENTRY_POINT
 audio_init
         jsr     msu_driver_init
         tst.b   d0                              ; if 1: no CD Hardware found
-audio_init_fail
-        bne     audio_init_fail                 ; Loop forever
+.audio_init_fail
+        bne     .audio_init_fail                ; Loop forever
 
         MCD_COMMAND CMD_NOSEEK, 1
         MCD_COMMAND CMD_VOL,    255
@@ -111,31 +121,34 @@ audio_init_fail
         align   2
 play_music_track
         tst.b   d0                              ; d0 = track number
-        bne     play
+        bne     .play
             ; 0 = Stop
             MCD_COMMAND CMD_PAUSE, 0
-            bra     original_code_4013a
-play
+            bra     .original_code_4013a
+.play
+        ; Save used registers to prevent graphics corruption at the main menu screen in MKII Unlimited. (Only a0 is really required but save all to be on the save side)
+        movem.l d1-d2/a0,-(sp)
+
         lea     AUDIO_TBL,a0
-        moveq   #TOTAL_TRACKS-1,d1
-find_track_loop
+        moveq   #((AUDIO_TBL_END-AUDIO_TBL)/2)-1,d1
+.find_track_loop
             move.w  d1,d2
             add.w   d2,d2
             move.w  (a0,d2),d2
             cmp.b   d2,d0
-            bne     next_track
+            bne     .next_track
 
                 ; Track found: Determine command type
                 lsr.w   #8,d2
                 bclr    #7,d2
-                bne     loop_play
+                bne     .loop_play
                     ; Single repetition
                     ori.w   #CMD_PLAY,d2
-                bra     cmd_type_select_done
-loop_play
+                bra     .cmd_type_select_done
+.loop_play
                     ; Play in infinite loop
                     ori.w   #CMD_PLAY_LOOP,d2
-cmd_type_select_done
+.cmd_type_select_done
 
                 ; Send play command
                 MCD_WAIT
@@ -144,16 +157,20 @@ cmd_type_select_done
 
                 ; Run stop command for original driver
                 moveq   #0,d0
-                bra     original_code_4013a
-next_track
-        dbra    d1,find_track_loop
+                bra     .play_done
+.next_track
+        dbra    d1,.find_track_loop
 
-            ; If no matching cd track found run original track (should never get here)
+        ; If no matching cd track found run original track
 
-            ; First stop any still playing cd track
-            MCD_COMMAND CMD_PAUSE, 0
+        ; First stop any still playing cd track
+        MCD_COMMAND CMD_PAUSE, 0
 
-original_code_4013a
+.play_done
+        ; Restore used registers. Required for MKII Unlimited.
+        movem.l  (sp)+,d1-d2/a0
+
+.original_code_4013a
         addq.w  #1,d0
         move.w  d0,$ffffb176.w
         st      $ffffb208.w

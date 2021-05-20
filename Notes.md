@@ -31,3 +31,15 @@
 |  27   | 55  | Liu Kang's Friendship Dance             |
 |  28   | 72  | Shao Kahn Defeated                      |
 |  29   | 92  | Ending Theme                            |
+|  30   | 96  | *Warrior's Shrine                       |
+|  31   | e9  | *Warrior's Shrine Victory               |
+|  32   | b3  | *The Pit                                |
+|  33   | ea  | *The Pit Victory                        |
+|  34   | cf  | *Hall                                   |
+|  35   | e7  | *Hall Victory                           |
+|  36   | c1  | *Goro's Lair                            |
+|  37   | eb  | *Goro's Lair Victory                    |
+|  38   | a8  | *Entrance                               |
+|  39   | e8  | *Entrance Victory                       |
+
+*Original Mortal Kombat tracks added to Mortal Kombat II Unlimited
