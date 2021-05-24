@@ -1,22 +1,22 @@
-; Mega CD MMIO addresses (mode 1)
-MCD_CMD             equ $a12010                 ; Comm command 0
-MCD_ARG             equ $a12011                 ; Comm command 1
-MCD_CMD_CK          equ $a1201f                 ; MSU only!?
-MCD_STAT            equ $a12020                 ; Comm status 0 (0-ready, 1-init, 2-cmd busy)
+; Mega CD MMIO addresses used for communicating with msu-md driver on the mega cd (mode 1)
+MSU_COMM_CMD        equ $a12010                 ; Comm command 0 (high byte)
+MSU_COMM_ARG        equ $a12011                 ; Comm command 0 (low byte)
+MSU_COMM_CMD_CK     equ $a1201f                 ; Comm command 7 (low byte)
+MSU_COMM_STATUS     equ $a12020                 ; Comm status 0 (0-ready, 1-init, 2-cmd busy)
 
-; MCD_CMD commands (lower byte = param)
-CMD_PLAY            equ $1100                   ; PLAY      decimal no. of track (1-99) playback will be stopped in the end of track
-CMD_PLAY_LOOP       equ $1200                   ; PLAY LOOP decimal no. of track (1-99) playback will restart the track when end is reached
-CMD_PAUSE           equ $1300                   ; PAUSE     vol fading time. 1/75 of sec. (75 equal to 1 sec) instant stop if 0 pause playback
-CMD_RESUME          equ $1400                   ; RESUME    none. resume playback
-CMD_VOL             equ $1500                   ; VOL       volume 0-255. set cdda volume
-CMD_NOSEEK          equ $1600                   ; NOSEEK    0-on(default state), 1-off(no seek delays)  seek time emulation switch
-CMD_PLAYOF          equ $1a00                   ; PLAYOF    #1 = decimal no. of track (1-99) #2 = offset in sectors from the start of the track to apply when looping   play cdda track and loop from specified sector offset
+; msu-md commands
+MSU_PLAY            equ $1100                   ; PLAY      decimal no. of track (1-99) playback will be stopped in the end of track
+MSU_PLAY_LOOP       equ $1200                   ; PLAY LOOP decimal no. of track (1-99) playback will restart the track when end is reached
+MSU_PAUSE           equ $1300                   ; PAUSE     vol fading time. 1/75 of sec. (75 equal to 1 sec) instant stop if 0 pause playback
+MSU_RESUME          equ $1400                   ; RESUME    none. resume playback
+MSU_VOL             equ $1500                   ; VOL       volume 0-255. set cdda volume
+MSU_NOSEEK          equ $1600                   ; NOSEEK    0-on(default state), 1-off(no seek delays)  seek time emulation switch
+MSU_PLAYOF          equ $1a00                   ; PLAYOF    #1 = decimal no. of track (1-99) #2 = offset in sectors from the start of the track to apply when looping play cdda track and loop from specified sector offset
 
-; 32X registers
-REG_32X_BANK        equ $a15104                 ; Controls ROM bank visible in $900000 - $9FFFFF
+; 32X registers (68000 address space)
+REG_32X_BANK        equ $a15104                 ; Controls 1MB ROM bank visible in $900000 - $9FFFFF range on the mega drive 68000
 
-; 32X memory addresses
+; 32X memory addresses (68000 address space)
 ROM_BASE_32X        equ $880000
 ROM_BANK_BASE_32X   equ $900000
 
@@ -26,59 +26,62 @@ ROM_END             equ $3facd0                 ; High to be compatible with all
 ; CONFIG: ------------------------------------------------------------------------------------------
 
 SEGA_32X = 0                                    ; Create 32X patch?
-SEGA_32X_PAL = 0                                ; Patch PAL version, NTSC otherwise
 
 ; MACROS: ------------------------------------------------------------------------------------------
 
-    macro MCD_WAIT
+    macro MSU_WAIT
 .\@
-        tst.b   MCD_STAT
+        tst.b   MSU_COMM_STATUS
         bne.s   .\@
     endm
 
-    macro MCD_COMMAND cmd, param
-        MCD_WAIT
-        move.w  #(\1|\2),MCD_CMD                ; Send msu cmd
-        addq.b  #1,MCD_CMD_CK                   ; Increment command clock
+    macro MSU_COMMAND cmd, param
+        MSU_WAIT
+        move.w  #(\1|\2),MSU_COMM_CMD           ; Send msu cmd
+        addq.b  #1,MSU_COMM_CMD_CK              ; Increment command clock
     endm
 
     macro JMP_32X routine
         jmp     \1+ROM_BASE_32X
     endm
 
-    macro CALL_32X_BANKED routine
+    macro JSR_32X_BANKED subroutine
         move.w  REG_32X_BANK,-(sp)
         move.w  #3,REG_32X_BANK
         jsr     ((\1-$300000)+ROM_BANK_BASE_32X)
         move.w  (sp)+,REG_32X_BANK
     endm
 
-    if SEGA_32X
 ; 32X OVERRIDES : ------------------------------------------------------------------------------------------
+    if SEGA_32X
 
         org     $800                            ; $880800
-ENTRY_POINT
-        JMP_32X audio_init_32x
+        jmp     ENTRY_POINT(pc)
 
-        ; Use the reserved/unused 68000 vector space to place code in non bankable ROM
-        org     $000000c0
-audio_init_32x
-        CALL_32X_BANKED audio_init
+        org     $804
+GameAddrLow
+
+        ; Use the 32x "new" 68000 exception jumb table reserved space to place the redirect code in non bankable ROM (72 bytes available)
+        ; Redirect code must be in non bankable ROM as JSR_32X_BANKED could change the current bank and so mess up the current execution if called directly from the banked ROM area
+        org     $242                            ; $880242
+ENTRY_POINT
+        JSR_32X_BANKED audio_init
 
         ; Jump to the original starting code
-    if SEGA_32X_PAL
-        jmp $908794     ; eu
-    else
-        jmp $90878c     ; us/jp
-    endif
+        move.w  #$90,d0
+        swap    d0
+        move.w  GameAddrLow(pc),d0
+        movea.l d0,a0
+        jmp     (a0)                            ; 38 bytes
 
 play_music_track_32x
-        CALL_32X_BANKED play_music_track
-        rts
+        JSR_32X_BANKED play_music_track
+        rts                                     ; 26 bytes
+                                                ; 64 bytes total
 
-        ; Original play_music_track sub routine
-        org     $4013a
-        JMP_32X play_music_track_32x
+        ; Original play_music_track sub routine (30 bytes available)
+        org     $4013a                          ; $8c013a/$94013a
+        JMP_32X play_music_track_32x            ; 6 bytes total
 
         org     ROM_END
 
@@ -107,13 +110,13 @@ ENTRY_POINT
 
         align   2
 audio_init
-        jsr     msu_driver_init
+        bsr     msu_driver_init
         tst.b   d0                              ; if 1: no CD Hardware found
 .audio_init_fail
         bne     .audio_init_fail                ; Loop forever
 
-        MCD_COMMAND CMD_NOSEEK, 1
-        MCD_COMMAND CMD_VOL,    255
+        MSU_COMMAND MSU_NOSEEK, 1
+        MSU_COMMAND MSU_VOL,    255
         rts
 
 ; Sound: -------------------------------------------------------------------------------------
@@ -123,13 +126,13 @@ play_music_track
         tst.b   d0                              ; d0 = track number
         bne     .play
             ; 0 = Stop
-            MCD_COMMAND CMD_PAUSE, 0
-            bra     .original_code_4013a
+            MSU_COMMAND MSU_PAUSE, 0
+        bra     .original_code_4013a
 .play
         ; Save used registers to prevent graphics corruption at the main menu screen in MKII Unlimited. (Only a0 is really required but save all to be on the save side)
         movem.l d1-d2/a0,-(sp)
 
-        lea     AUDIO_TBL,a0
+        lea     AUDIO_TBL(pc),a0
         moveq   #((AUDIO_TBL_END-AUDIO_TBL)/2)-1,d1
 .find_track_loop
             move.w  d1,d2
@@ -138,22 +141,22 @@ play_music_track
             cmp.b   d2,d0
             bne     .next_track
 
-                ; Track found: Determine command type
+                ; Track found: Determine msu command type
                 lsr.w   #8,d2
                 bclr    #7,d2
-                bne     .loop_play
+                bne     .cmd_play_loop
                     ; Single repetition
-                    ori.w   #CMD_PLAY,d2
+                    ori.w   #MSU_PLAY,d2
                 bra     .cmd_type_select_done
-.loop_play
+.cmd_play_loop
                     ; Play in infinite loop
-                    ori.w   #CMD_PLAY_LOOP,d2
+                    ori.w   #MSU_PLAY_LOOP,d2
 .cmd_type_select_done
 
                 ; Send play command
-                MCD_WAIT
-                move.w  d2,MCD_CMD
-                addq.b  #1,MCD_CMD_CK
+                MSU_WAIT
+                move.w  d2,MSU_COMM_CMD
+                addq.b  #1,MSU_COMM_CMD_CK
 
                 ; Run stop command for original driver
                 moveq   #0,d0
@@ -164,10 +167,10 @@ play_music_track
         ; If no matching cd track found run original track
 
         ; First stop any still playing cd track
-        MCD_COMMAND CMD_PAUSE, 0
+        MSU_COMMAND MSU_PAUSE, 0
 
 .play_done
-        ; Restore used registers. Required for MKII Unlimited.
+        ; Restore used registers
         movem.l  (sp)+,d1-d2/a0
 
 .original_code_4013a
