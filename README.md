@@ -24,6 +24,8 @@ Driver Source: https://github.com/krikzz/msu-md
 
 ### HOW TO USE
 
+NB: For the 32X version you need a real Sega/Mega CD.
+
 1. Obtain source ROM.
 2. Use the BPS patch file from the current release to patch your ROM. I recommend FLIPS.
    -> https://dl.smwcentral.net/11474/floating.zip
