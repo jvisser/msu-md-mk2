@@ -1,17 +1,14 @@
+; CONFIG: ------------------------------------------------------------------------------------------
+
+SEGA_32X = 0                                    ; Create 32X patch?
+
+; MEMORY: ------------------------------------------------------------------------------------------
+
 ; Mega CD MMIO addresses used for communicating with msu-md driver on the mega cd (mode 1)
 MSU_COMM_CMD        equ $a12010                 ; Comm command 0 (high byte)
 MSU_COMM_ARG        equ $a12011                 ; Comm command 0 (low byte)
 MSU_COMM_CMD_CK     equ $a1201f                 ; Comm command 7 (low byte)
 MSU_COMM_STATUS     equ $a12020                 ; Comm status 0 (0-ready, 1-init, 2-cmd busy)
-
-; msu-md commands
-MSU_PLAY            equ $1100                   ; PLAY      decimal no. of track (1-99) playback will be stopped in the end of track
-MSU_PLAY_LOOP       equ $1200                   ; PLAY LOOP decimal no. of track (1-99) playback will restart the track when end is reached
-MSU_PAUSE           equ $1300                   ; PAUSE     vol fading time. 1/75 of sec. (75 equal to 1 sec) instant stop if 0 pause playback
-MSU_RESUME          equ $1400                   ; RESUME    none. resume playback
-MSU_VOL             equ $1500                   ; VOL       volume 0-255. set cdda volume
-MSU_NOSEEK          equ $1600                   ; NOSEEK    0-on(default state), 1-off(no seek delays)  seek time emulation switch
-MSU_PLAYOF          equ $1a00                   ; PLAYOF    #1 = decimal no. of track (1-99) #2 = offset in sectors from the start of the track to apply when looping play cdda track and loop from specified sector offset
 
 ; 32X registers (68000 address space)
 REG_32X_BANK        equ $a15104                 ; Controls 1MB ROM bank visible in $900000 - $9FFFFF range on the mega drive 68000
@@ -23,9 +20,22 @@ ROM_BANK_BASE_32X   equ $900000
 ; Where to put the code
 ROM_END             equ $3facd0                 ; High to be compatible with all supported versions (Needs 4MB padded input ROMS for all versions)
 
-; CONFIG: ------------------------------------------------------------------------------------------
+; Krisalis sound driver variables
+    if SEGA_32X
+KRISALIS_VAR_BASE   equ $ffffb4f0
+    else
+KRISALIS_VAR_BASE   equ $ffffb172
+    endif
 
-SEGA_32X = 0                                    ; Create 32X patch?
+; MSU COMMANDS: ------------------------------------------------------------------------------------------
+
+MSU_PLAY            equ $1100                   ; PLAY      decimal no. of track (1-99) playback will be stopped in the end of track
+MSU_PLAY_LOOP       equ $1200                   ; PLAY LOOP decimal no. of track (1-99) playback will restart the track when end is reached
+MSU_PAUSE           equ $1300                   ; PAUSE     vol fading time. 1/75 of sec. (75 equal to 1 sec) instant stop if 0 pause playback
+MSU_RESUME          equ $1400                   ; RESUME    none. resume playback
+MSU_VOL             equ $1500                   ; VOL       volume 0-255. set cdda volume
+MSU_NOSEEK          equ $1600                   ; NOSEEK    0-on(default state), 1-off(no seek delays)  seek time emulation switch
+MSU_PLAYOF          equ $1a00                   ; PLAYOF    #1 = decimal no. of track (1-99) #2 = offset in sectors from the start of the track to apply when looping play cdda track and loop from specified sector offset
 
 ; MACROS: ------------------------------------------------------------------------------------------
 
@@ -141,17 +151,9 @@ play_music_track
             cmp.b   d2,d0
             bne     .next_track
 
-                ; Track found: Determine msu command type
-                lsr.w   #8,d2
-                bclr    #7,d2
-                bne     .cmd_play_loop
-                    ; Single repetition
-                    ori.w   #MSU_PLAY,d2
-                bra     .cmd_type_select_done
-.cmd_play_loop
-                    ; Play in infinite loop
-                    ori.w   #MSU_PLAY_LOOP,d2
-.cmd_type_select_done
+                ; Set cd track number
+                move.b  d1,d2
+                addq.b  #1,d2
 
                 ; Send play command
                 MSU_WAIT
@@ -175,69 +177,60 @@ play_music_track
 
 .original_code_4013a
         addq.w  #1,d0
-    if SEGA_32X
-        move.w  d0,$ffffb4f4.w
-        st      $ffffb586.w
-        sf      $ffffb558.w
-        clr.b   $ffffb580.w
-        clr.w   $ffffb4f0.w
-        clr.w   $ffffb4f2.w
-        sf      $ffffb514.w
-    else
-        move.w  d0,$ffffb176.w
-        st      $ffffb208.w
-        sf      $ffffb1da.w
-        clr.b   $ffffb202.w
-        clr.w   $ffffb172.w
-        clr.w   $ffffb174.w
-        sf      $ffffb196.w
-    endif
+        move.w  d0,(KRISALIS_VAR_BASE+$04).w
+        st      (KRISALIS_VAR_BASE+$96).w
+        sf      (KRISALIS_VAR_BASE+$68).w
+        clr.b   (KRISALIS_VAR_BASE+$90).w
+        clr.w   (KRISALIS_VAR_BASE+$00).w
+        clr.w   (KRISALIS_VAR_BASE+$02).w
+        sf      (KRISALIS_VAR_BASE+$24).w
         rts
 
 ; TABLES: ------------------------------------------------------------------------------------------
 
-AUDIO_TBL       ;%rtttttttcccccccc (r=repeat, t=cd track number, c=original music id)
-                                                ; #Track Name
-        dc.w    $0131                           ; 01 - Title Theme
-        dc.w    $824f                           ; 02 - Character Select
-        dc.w    $0357                           ; 03 - Selected
-        dc.w    $8469                           ; 04 - Your Destiny
-        dc.w    $8538                           ; 05 - The Dead Pool
-        dc.w    $8640                           ; 06 - The Dead Pool ~ Critical
-        dc.w    $0741                           ; 07 - The Dead Pool ~ Over
-        dc.w    $8888                           ; 08 - The Tomb - Special Portal
-        dc.w    $8990                           ; 09 - The Tomb ~ Critical
-        dc.w    $0a91                           ; 10 - The Tomb ~ Over
-        dc.w    $8b02                           ; 11 - Wasteland - The Pit II - Kahn's Arena
-        dc.w    $8c2e                           ; 12 - Wasteland ~ Critical
-        dc.w    $0d0d                           ; 13 - Wasteland ~ Over
-        dc.w    $8e42                           ; 14 - Cloud Room - Portal
-        dc.w    $8f4d                           ; 15 - Cloud Room ~ Critical
-        dc.w    $104e                           ; 16 - Cloud Room ~ Over
-        dc.w    $910e                           ; 17 - Living Forest
-        dc.w    $922f                           ; 18 - Living Forest ~ Critical
-        dc.w    $1320                           ; 19 - Living Forest ~ Over
-        dc.w    $9421                           ; 20 - Armoury
-        dc.w    $9530                           ; 21 - Armoury ~ Critical
-        dc.w    $162d                           ; 22 - Armoury ~ Over
-        dc.w    $1773                           ; 23 - Finish Him!
-        dc.w    $1852                           ; 24 - Fatality!
-        dc.w    $1953                           ; 25 - Babality!
-        dc.w    $1a58                           ; 26 - Friendship!
-        dc.w    $1b55                           ; 27 - Liu Kang's Friendship Dance
-        dc.w    $1c72                           ; 28 - Shao Kahn Defeated
-        dc.w    $9d92                           ; 29 - Ending Theme
+        align 2
+AUDIO_TBL
+        ;       #Command|id                     #Track Name
+        dc.w    MSU_PLAY|$31                    ; 01 - Title Theme
+        dc.w    MSU_PLAY_LOOP|$4f               ; 02 - Character Select
+        dc.w    MSU_PLAY|$57                    ; 03 - Selected
+        dc.w    MSU_PLAY_LOOP|$69               ; 04 - Your Destiny
+        dc.w    MSU_PLAY_LOOP|$38               ; 05 - The Dead Pool
+        dc.w    MSU_PLAY_LOOP|$40               ; 06 - The Dead Pool ~ Critical
+        dc.w    MSU_PLAY|$41                    ; 07 - The Dead Pool ~ Over
+        dc.w    MSU_PLAY_LOOP|$88               ; 08 - The Tomb - Special Portal
+        dc.w    MSU_PLAY_LOOP|$90               ; 09 - The Tomb ~ Critical
+        dc.w    MSU_PLAY|$91                    ; 10 - The Tomb ~ Over
+        dc.w    MSU_PLAY_LOOP|$02               ; 11 - Wasteland - The Pit II - Kahn's Arena
+        dc.w    MSU_PLAY_LOOP|$2e               ; 12 - Wasteland ~ Critical
+        dc.w    MSU_PLAY|$0d                    ; 13 - Wasteland ~ Over
+        dc.w    MSU_PLAY_LOOP|$42               ; 14 - Cloud Room - Portal
+        dc.w    MSU_PLAY_LOOP|$4d               ; 15 - Cloud Room ~ Critical
+        dc.w    MSU_PLAY|$4e                    ; 16 - Cloud Room ~ Over
+        dc.w    MSU_PLAY_LOOP|$0e               ; 17 - Living Forest
+        dc.w    MSU_PLAY_LOOP|$2f               ; 18 - Living Forest ~ Critical
+        dc.w    MSU_PLAY|$20                    ; 19 - Living Forest ~ Over
+        dc.w    MSU_PLAY_LOOP|$21               ; 20 - Armoury
+        dc.w    MSU_PLAY_LOOP|$30               ; 21 - Armoury ~ Critical
+        dc.w    MSU_PLAY|$2d                    ; 22 - Armoury ~ Over
+        dc.w    MSU_PLAY|$73                    ; 23 - Finish Him!
+        dc.w    MSU_PLAY|$52                    ; 24 - Fatality!
+        dc.w    MSU_PLAY|$53                    ; 25 - Babality!
+        dc.w    MSU_PLAY|$58                    ; 26 - Friendship!
+        dc.w    MSU_PLAY|$55                    ; 27 - Liu Kang's Friendship Dance
+        dc.w    MSU_PLAY|$72                    ; 28 - Shao Kahn Defeated
+        dc.w    MSU_PLAY_LOOP|$92               ; 29 - Ending Theme
         ; Mortal Kombat tracks included in Mortal Kombat II Unlimited (Hack)
-        dc.w    $9e96                           ; 30 - Warrior's Shrine
-        dc.w    $1fe9                           ; 31 - Warrior's Shrine Victory
-        dc.w    $a0b3                           ; 32 - The Pit
-        dc.w    $21ea                           ; 33 - The Pit Victory
-        dc.w    $a2cf                           ; 34 - Hall
-        dc.w    $23e7                           ; 35 - Hall Victory
-        dc.w    $a4c1                           ; 36 - Goro's Lair
-        dc.w    $25eb                           ; 37 - Goro's Lair Victory
-        dc.w    $a6a8                           ; 38 - Entrance
-        dc.w    $27e8                           ; 39 - Entrance Victory
+        dc.w    MSU_PLAY_LOOP|$96               ; 30 - Warrior's Shrine
+        dc.w    MSU_PLAY|$e9                    ; 31 - Warrior's Shrine Victory
+        dc.w    MSU_PLAY_LOOP|$b3               ; 32 - The Pit
+        dc.w    MSU_PLAY|$ea                    ; 33 - The Pit Victory
+        dc.w    MSU_PLAY_LOOP|$cf               ; 34 - Hall
+        dc.w    MSU_PLAY|$e7                    ; 35 - Hall Victory
+        dc.w    MSU_PLAY_LOOP|$c1               ; 36 - Goro's Lair
+        dc.w    MSU_PLAY|$eb                    ; 37 - Goro's Lair Victory
+        dc.w    MSU_PLAY_LOOP|$a8               ; 38 - Entrance
+        dc.w    MSU_PLAY|$e8                    ; 39 - Entrance Victory
 AUDIO_TBL_END
 
 ; MSU-MD DRIVER: -----------------------------------------------------------------------------------
