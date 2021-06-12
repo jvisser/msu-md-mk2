@@ -109,6 +109,15 @@ Game
         org     $4013a
         jmp     play_music_track
 
+        ; Mortal Kombat 2 Unlimited specific patches (Have no effect on base game)
+        ; Remap intro song to ending track
+        org     $3ef5f0
+        dc.w    $0092                           ; WM4X-6AHT
+
+        ; Remap bio screen to ending track
+        org     $3cdbb0
+        dc.w    $0092                           ; WMPX-2AFT
+
         org     ROM_END
 ENTRY_POINT
         bsr     audio_init
