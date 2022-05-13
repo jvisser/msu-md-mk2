@@ -1,6 +1,6 @@
 ; CONFIG: ------------------------------------------------------------------------------------------
 
-SEGA_32X = 0                                    ; Create 32X patch?
+SEGA_32X = 1                                    ; Create 32X patch?
 
 ; MEMORY: ------------------------------------------------------------------------------------------
 
@@ -37,18 +37,23 @@ MSU_VOL             equ $1500                   ; VOL       volume 0-255. set cd
 MSU_NOSEEK          equ $1600                   ; NOSEEK    0-on(default state), 1-off(no seek delays)  seek time emulation switch
 MSU_PLAYOF          equ $1a00                   ; PLAYOF    #1 = decimal no. of track (1-99) #2 = offset in sectors from the start of the track to apply when looping play cdda track and loop from specified sector offset
 
-; MACROS: ------------------------------------------------------------------------------------------
+MD_PLUS_OVERLAY_PORT:			equ $0003f7fa
+MD_PLUS_CMD_PORT:				equ $0003f7fe
+MD_PLUS_RESPONSE_PORT:			equ $0003f7fc
 
-    macro MSU_WAIT
-.\@
-        tst.b   MSU_COMM_STATUS
-        bne.s   .\@
+; MACROS: ------------------------------------------------------------------------------------------
+    macro MSU_CALL
+        move.w  sr,-(sp)
+        move.w  #$2700,sr
+        move.w	#$CD54,(ROM_BASE_32X+MD_PLUS_OVERLAY_PORT)
+        move.w	d2,(ROM_BASE_32X+MD_PLUS_CMD_PORT)
+        move.w	#$0000,(ROM_BASE_32X+MD_PLUS_OVERLAY_PORT)
+        move.w  (sp)+,sr
     endm
 
-    macro MSU_COMMAND cmd, param
-        MSU_WAIT
-        move.w  #(\1|\2),MSU_COMM_CMD           ; Send msu cmd
-        addq.b  #1,MSU_COMM_CMD_CK              ; Increment command clock
+    macro MSU_PAUSE
+        move.w #MSU_PAUSE,d2
+        MSU_CALL
     endm
 
     macro JMP_32X routine
@@ -66,32 +71,18 @@ MSU_PLAYOF          equ $1a00                   ; PLAYOF    #1 = decimal no. of 
     if SEGA_32X
 
         org     $800                            ; $880800
-        jmp     ENTRY_POINT(pc)
-
-        org     $804
-GameAddrLow
 
         ; Use the 32x "new" 68000 exception jumb table reserved space to place the redirect code in non bankable ROM (72 bytes available)
         ; Redirect code must be in non bankable ROM as JSR_32X_BANKED could change the current bank and so mess up the current execution if called directly from the banked ROM area
         org     $242                            ; $880242
-ENTRY_POINT
-        JSR_32X_BANKED audio_init
-
-        ; Jump to the original starting code
-        move.w  #$90,d0
-        swap    d0
-        move.w  GameAddrLow(pc),d0
-        movea.l d0,a0
-        jmp     (a0)                            ; 38 bytes
 
 play_music_track_32x
         JSR_32X_BANKED play_music_track
-        rts                                     ; 26 bytes
-                                                ; 64 bytes total
+        rts
 
         ; Original play_music_track sub routine (30 bytes available)
         org     $4013a                          ; $8c013a/$94013a
-        JMP_32X play_music_track_32x            ; 6 bytes total
+        JMP_32X play_music_track_32x
 
         org     ROM_END
 
@@ -120,36 +111,24 @@ Game
 
         org     ROM_END
 ENTRY_POINT
-        bsr     audio_init
+        ;bsr     audio_init
         jmp     Game
 
     endif
-
-; MSU-MD Init: -------------------------------------------------------------------------------------
-
-        align   2
-audio_init
-        bsr     msu_driver_init
-        tst.b   d0                              ; if 1: no CD Hardware found
-.audio_init_fail
-        bne     .audio_init_fail                ; Loop forever
-
-        MSU_COMMAND MSU_NOSEEK, 1
-        MSU_COMMAND MSU_VOL,    255
-        rts
 
 ; Sound: -------------------------------------------------------------------------------------
 
         align   2
 play_music_track
+        ; Save used registers to prevent graphics corruption at the main menu screen in MKII Unlimited. (Only a0 is really required but save all to be on the save side)
+        movem.l d1-d2/a0,-(sp)
+
         tst.b   d0                              ; d0 = track number
         bne     .play
             ; 0 = Stop
-            MSU_COMMAND MSU_PAUSE, 0
+            MSU_PAUSE
         bra     .original_code_4013a
 .play
-        ; Save used registers to prevent graphics corruption at the main menu screen in MKII Unlimited. (Only a0 is really required but save all to be on the save side)
-        movem.l d1-d2/a0,-(sp)
 
         lea     AUDIO_TBL(pc),a0
         moveq   #((AUDIO_TBL_END-AUDIO_TBL)/2)-1,d1
@@ -165,9 +144,7 @@ play_music_track
                 addq.b  #1,d2
 
                 ; Send play command
-                MSU_WAIT
-                move.w  d2,MSU_COMM_CMD
-                addq.b  #1,MSU_COMM_CMD_CK
+                MSU_CALL
 
                 ; Run stop command for original driver
                 moveq   #0,d0
@@ -178,13 +155,14 @@ play_music_track
         ; If no matching cd track found run original track
 
         ; First stop any still playing cd track
-        MSU_COMMAND MSU_PAUSE, 0
+        MSU_PAUSE
 
 .play_done
+
+.original_code_4013a
         ; Restore used registers
         movem.l  (sp)+,d1-d2/a0
 
-.original_code_4013a
         addq.w  #1,d0
         move.w  d0,(KRISALIS_VAR_BASE+$04).w
         st      (KRISALIS_VAR_BASE+$96).w
@@ -245,5 +223,5 @@ AUDIO_TBL_END
 ; MSU-MD DRIVER: -----------------------------------------------------------------------------------
 
         align 2
-msu_driver_init
-        incbin  "msu-drv.bin"
+;msu_driver_init
+        ;incbin  "msu-drv.bin"
